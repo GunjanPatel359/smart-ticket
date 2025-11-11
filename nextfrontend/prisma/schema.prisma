@@ -1,0 +1,260 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  admin
+  technician
+  user
+}
+
+enum AvailabilityStatus {
+  available
+  busy
+  in_meeting
+  on_break
+  end_of_shift
+  focus_mode
+}
+
+enum SkillLevel {
+  junior
+  mid
+  senior
+  expert
+}
+
+enum TicketStatus {
+  new
+  assigned
+  in_progress
+  on_hold
+  resolved
+  closed
+  cancelled
+}
+
+enum Priority {
+  low
+  normal
+  high
+  critical
+}
+
+enum Impact {
+  low
+  medium
+  high
+  critical
+}
+
+enum Urgency {
+  low
+  normal
+  high
+  critical
+}
+
+//
+// MODELS
+//
+
+model User {
+  id        Int       @id @default(autoincrement())
+  name      String    @db.VarChar(255)
+  email     String    @unique @db.VarChar(255)
+  contactNo String?   @db.VarChar(20) @map("contact_no")
+
+  password  String    @db.VarChar(255)
+  department String?  @db.VarChar(100)
+
+  // Relations
+  requestedTickets Ticket[]   @relation("UserTickets")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("users")
+}
+
+model TechnicianSkill {
+  id            Int       @id @default(autoincrement())
+  technicianId  Int
+  skillId       Int
+  score         Int       @default(50) // 0-100 skill score
+
+  technician    Technician @relation(fields: [technicianId], references: [id])
+  skill         Skill      @relation(fields: [skillId], references: [id])
+
+  @@unique([technicianId, skillId])
+  @@map("technician_skills")
+}
+
+model Technician {
+  id        Int       @id @default(autoincrement())
+  name      String    @db.VarChar(255)
+  email     String    @unique @db.VarChar(255)
+  contactNo String?   @db.VarChar(20) @map("contact_no")
+  password  String    @db.VarChar(255)
+  department String?  @db.VarChar(100)
+
+  currentTickets      Int      @default(0) @map("current_tickets")
+  resolvedTickets     Int      @default(0) @map("resolved_tickets")
+  totalTickets        Int      @default(0) @map("total_tickets")
+  
+  assignedTickets     Ticket[]
+  technicianSkills    TechnicianSkill[]   // refactored from skills
+
+  workload            Int       @default(0)
+  technicianLevel     SkillLevel @default(junior) @map("technician_level") // renamed from skillLevel
+
+  availabilityStatus  AvailabilityStatus @default(available) @map("availability_status")
+  isActive            Boolean   @default(true) @map("is_active")
+
+  experience          Float     @default(0.0)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("technicians")
+}
+
+
+model Admin {
+  id        Int       @id @default(autoincrement())
+  name      String    @db.VarChar(255)
+  email     String    @unique @db.VarChar(255)
+  contactNo String?   @db.VarChar(20) @map("contact_no")
+  password  String    @db.VarChar(255)
+  department String?  @db.VarChar(100)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("admin")
+}
+
+model Skill {
+  id          Int     @id @default(autoincrement())
+  name        String  @unique @db.VarChar(255)
+  category    String
+  description String?
+  isActive    Boolean @default(true) @map("is_active")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("skills")
+  Ticket Ticket[]
+  TechnicianSkill TechnicianSkill[]
+}
+
+model Task {
+  id          Int       @id @default(autoincrement())
+  title       String
+  description String?
+  status      String     @default("pending") // could be enum if you prefer
+  assignedTo  Int?       // could reference Technician
+  dueDate     DateTime?
+  completedAt DateTime?
+  createdAt   DateTime   @default(now())
+
+  // Relation back to Ticket
+  ticketId Int
+  ticket   Ticket        @relation(fields: [ticketId], references: [id])
+
+  @@map("ticket_tasks")
+}
+
+
+model WorkLog {
+  id               Int       @id @default(autoincrement())
+  technicianId     Int
+  description      String
+  timeSpentMinutes Int
+  createdAt        DateTime  @default(now())
+
+  // Relation back to Ticket
+  ticketId Int
+  ticket   Ticket    @relation(fields: [ticketId], references: [id])
+
+  @@map("ticket_work_logs")
+}
+
+
+model AuditTrail {
+  id          Int       @id @default(autoincrement())
+  action      String
+  oldValue    String?
+  newValue    String?
+  comment     String?
+  performedBy String
+  timestamp   DateTime  @default(now())
+
+  // Relation back to Ticket
+  ticketId Int
+  ticket   Ticket    @relation(fields: [ticketId], references: [id])
+
+  @@map("ticket_audit_trail")
+}
+
+
+model Ticket {
+  id          Int     @id @default(autoincrement())
+  subject     String  @db.VarChar(500)
+  description String
+  status      TicketStatus @default(new)
+
+  tags        Json?   @default("[]")
+
+  priority    Priority @default(normal)
+  impact      Impact   @default(medium)
+  urgency     Urgency  @default(normal)
+  slaViolated Boolean  @default(false) @map("sla_violated")
+  escalationCount  Int      @default(0) @map("escalation_count")
+
+
+  // Relations
+  requesterId  Int
+  requester    User       @relation("UserTickets", fields: [requesterId], references: [id])
+  assignedTechnicianId Int? @map("assigned_technician_id")
+  assignedTechnician   Technician? @relation(fields: [assignedTechnicianId], references: [id])
+
+  requiredSkills Skill[]
+
+  tasks         Task[]
+  workLogs      WorkLog[] 
+  auditTrail    AuditTrail[] 
+
+  reopenedCount   Int       @default(0) @map("reopened_count")
+  
+  justification   String?   @default("Severity: Medium")
+  
+  satisfactionRating Int?   @map("satisfaction_rating")
+  score           Float? 
+  feedback        String?
+
+  firstResponseTime DateTime?    @map("first_response_time")
+  resolutionTime   DateTime?     @map("resolution_time")
+  
+  resolutionDue   DateTime? @map("resolution_due")
+
+  resolvedAt      DateTime? @map("resolved_at")
+  closedAt        DateTime? @map("closed_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("tickets")
+}
