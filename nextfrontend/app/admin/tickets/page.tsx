@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ChevronUpIcon, ChevronDownIcon } from "@heroicons/react/24/outline";
 import { getAllTickets } from "@/actions/ticket";
@@ -116,9 +117,11 @@ export default function ITSupportDashboard() {
   const [sortConfig, setSortConfig] = useState<{ key: keyof Ticket; direction: "asc" | "desc" } | null>(null);
   const [page, setPage] = useState(1);
   const [limit] = useState(10); // tickets per page
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchTickets = async () => {
+      setLoading(true);
       const res = await getAllTickets({
         page,
         limit,
@@ -126,6 +129,7 @@ export default function ITSupportDashboard() {
         sortOrder: sortConfig?.direction || "desc",
       });
       if (res.success && res.tickets) setTickets(res.tickets);
+      setLoading(false);
     };
     fetchTickets();
   }, [page, sortConfig]);
@@ -166,36 +170,56 @@ export default function ITSupportDashboard() {
           <CardDescription>Manage IT tickets with sorting</CardDescription>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead onClick={() => handleSort("subject")} className="cursor-pointer">
-                  Subject <SortIcon column="subject" />
-                </TableHead>
-                <TableHead onClick={() => handleSort("description")} className="cursor-pointer">
-                  Description <SortIcon column="description" />
-                </TableHead>
-                <TableHead onClick={() => handleSort("status")} className="cursor-pointer">
-                  Status <SortIcon column="status" />
-                </TableHead>
-                <TableHead onClick={() => handleSort("priority")} className="cursor-pointer">
-                  Priority <SortIcon column="priority" />
-                </TableHead>
-                <TableHead onClick={() => handleSort("impact")} className="cursor-pointer">
-                  Impact <SortIcon column="impact" />
-                </TableHead>
-                <TableHead onClick={() => handleSort("urgency")} className="cursor-pointer">
-                  Urgency <SortIcon column="urgency" />
-                </TableHead>
-                <TableHead onClick={() => handleSort("satisfactionRating")} className="cursor-pointer">
-                  Satisfaction <SortIcon column="satisfactionRating" />
-                </TableHead>
-                <TableHead>Required Skills</TableHead>
-                <TableHead>Assigned Technician</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {sortedTickets.map((ticket) => (
+          {loading ? (
+            <div className="space-y-4">
+              <div className="space-y-2">
+                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(i => (
+                  <div key={i} className="flex items-center gap-4 py-3 border-b">
+                    <Skeleton className="h-4 w-32" />
+                    <Skeleton className="h-4 flex-1" />
+                    <Skeleton className="h-6 w-20" />
+                    <Skeleton className="h-6 w-20" />
+                    <Skeleton className="h-6 w-20" />
+                    <Skeleton className="h-6 w-20" />
+                    <Skeleton className="h-6 w-16" />
+                    <Skeleton className="h-6 w-24" />
+                    <Skeleton className="h-4 w-24" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead onClick={() => handleSort("subject")} className="cursor-pointer">
+                      Subject <SortIcon column="subject" />
+                    </TableHead>
+                    <TableHead onClick={() => handleSort("description")} className="cursor-pointer">
+                      Description <SortIcon column="description" />
+                    </TableHead>
+                    <TableHead onClick={() => handleSort("status")} className="cursor-pointer">
+                      Status <SortIcon column="status" />
+                    </TableHead>
+                    <TableHead onClick={() => handleSort("priority")} className="cursor-pointer">
+                      Priority <SortIcon column="priority" />
+                    </TableHead>
+                    <TableHead onClick={() => handleSort("impact")} className="cursor-pointer">
+                      Impact <SortIcon column="impact" />
+                    </TableHead>
+                    <TableHead onClick={() => handleSort("urgency")} className="cursor-pointer">
+                      Urgency <SortIcon column="urgency" />
+                    </TableHead>
+                    <TableHead onClick={() => handleSort("satisfactionRating")} className="cursor-pointer">
+                      Satisfaction <SortIcon column="satisfactionRating" />
+                    </TableHead>
+                    <TableHead>Required Skills</TableHead>
+                    <TableHead>Assigned Technician</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {sortedTickets.map((ticket) => (
                 <TableRow key={ticket.id}>
                   <TableCell>{ticket.subject}</TableCell>
                   <TableCell>{ticket.description}</TableCell>
@@ -234,9 +258,9 @@ export default function ITSupportDashboard() {
                   </TableCell>
                   <TableCell>{ticket.assignedTechnician?.name ?? "Unassigned"}</TableCell>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+                  ))}
+                </TableBody>
+              </Table>
               <div className="flex justify-end mt-4">
                 <button
                   className="px-4 py-2 bg-gray-200 rounded disabled:opacity-50"
@@ -254,6 +278,8 @@ export default function ITSupportDashboard() {
                   Next
                 </button>
               </div>
+            </>
+          )}
         </CardContent>
       </Card>
     </div>

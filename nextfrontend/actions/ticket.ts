@@ -292,13 +292,44 @@ export const getTechnicianCurrentTickets = async (): Promise<{
   }
 }
 
+export const getTechnicianAllTickets = async (): Promise<{
+  success: boolean;
+  message: string;
+  tickets?: Ticket[];
+}> => {
+  try {
+    const technician = await getTechnicianToken();
+    if (!technician) return { success: false, message: "Unauthorized" };
+
+    const tickets = await prisma.technician.findUnique({
+      where: {
+        id: technician.id
+      },
+      select: {
+        assignedTickets: {
+          orderBy: { createdAt: "desc" }
+        }
+      }
+    })
+
+    if (!tickets) {
+      return { success: false, message: "No tickets assigned to technician", tickets: [] }
+    }
+
+    return { success: true, message: "All technician tickets fetched", tickets: tickets?.assignedTickets || [] };
+  } catch (error) {
+    console.error("Error fetching all technician tickets:", error);
+    return { success: false, message: "Failed to fetch all technician tickets" };
+  }
+}
+
 export const getUserSupportTickets = async (): Promise<{
   success: boolean;
   message: string;
   tickets?: Ticket[];
 }> => {
   try {
-    const user = await getTechnicianToken();
+    const user = await getUserToken();
     if (!user) return { success: false, message: "Unauthorized" };
 
     const tickets = await prisma.user.findUnique({
@@ -318,8 +349,8 @@ export const getUserSupportTickets = async (): Promise<{
 
     return { success: true, message: "User support tickets fetched", tickets: tickets?.requestedTickets || [] };
   } catch (error) {
-    console.error("Error fetching technician open tickets:", error);
-    return { success: false, message: "Failed to fetch technician open tickets" };
+    console.error("Error fetching user support tickets:", error);
+    return { success: false, message: "Failed to fetch user support tickets" };
   }
 }
 

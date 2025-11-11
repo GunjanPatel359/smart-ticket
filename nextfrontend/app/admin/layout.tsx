@@ -7,41 +7,37 @@ import {
   TicketIcon,
   UserIcon,
   ChartBarIcon,
-  ClockIcon,
-  CheckCircleIcon,
   Cog6ToothIcon,
-  PlusIcon,
-  QueueListIcon,
-  TrophyIcon,
-  ChatBubbleLeftRightIcon,
   Bars3Icon,
   XMarkIcon,
   CalendarIcon,
   ArrowTrendingUpIcon,
   BellIcon,
-  MagnifyingGlassIcon,
-  ChevronLeftIcon,
-  ChevronRightIcon,
-  Squares2X2Icon
+  Squares2X2Icon,
+  HomeIcon
 } from "@heroicons/react/24/outline"
 
-import { useRouter } from "next/navigation"
+import { useRouter, usePathname } from "next/navigation"
 import { getAdminToken } from "@/lib/authmiddleware"
+import { Breadcrumb } from "@/components/ui/breadcrumb"
+import { useBreadcrumbs } from "@/hooks/useBreadcrumbs"
 
 type UserRole = "user" | "admin" | "technician"
 
 const admin = [
-    { name: "Dashboard", href: "/admin/dashboard", icon: ChartBarIcon },
+    { name: "Home", href: "/admin", icon: HomeIcon },
     { name: "Skills", href: "/admin/skills", icon:  Squares2X2Icon},
     { name: "Tickets", href: "/admin/tickets", icon: TicketIcon },
     { name: "Technicians", href: "/admin/technicians", icon: UserIcon },
     { name: "Analytics", href: "/admin/analytics", icon: ArrowTrendingUpIcon },
     { name: "Reports", href: "/admin/reports", icon: CalendarIcon },
-    { name: "Settings", href: "/admin/settings", icon: Cog6ToothIcon },
+    // { name: "Settings", href: "/admin/settings", icon: Cog6ToothIcon },
 ]
 
 export default function ITSupportDashboard({children}:{ children: React.ReactNode }) {
   const router=useRouter()
+  const pathname = usePathname()
+  const breadcrumbs = useBreadcrumbs()
   const [isAdmin, setIsAdmin] = useState(false)
   const currentRole = "admin"
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
@@ -101,19 +97,22 @@ export default function ITSupportDashboard({children}:{ children: React.ReactNod
           {!sidebarCollapsed && (
             <p className="px-3 text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">Navigation</p>
           )}
-          {navigation.map((item) => (
-            <Button
-              key={item.name}
-              variant="ghost"
-              className={`w-full ${sidebarCollapsed ? "justify-center px-2" : "justify-start"}`}
-              asChild
-            >
-              <a href={item.href} className="flex items-center gap-3">
-                <item.icon className="h-4 w-4 flex-shrink-0" />
-                {!sidebarCollapsed && <span>{item.name}</span>}
-              </a>
-            </Button>
-          ))}
+          {navigation.map((item) => {
+            const isActive = pathname === item.href
+            return (
+              <Button
+                key={item.name}
+                variant={isActive ? "default" : "ghost"}
+                className={`w-full ${sidebarCollapsed ? "justify-center px-2" : "justify-start"}`}
+                asChild
+              >
+                <a href={item.href} className="flex items-center gap-3">
+                  <item.icon className="h-4 w-4 flex-shrink-0" />
+                  {!sidebarCollapsed && <span>{item.name}</span>}
+                </a>
+              </Button>
+            )
+          })}
         </nav>
       </div>
 
@@ -143,8 +142,10 @@ export default function ITSupportDashboard({children}:{ children: React.ReactNod
           </div>
         </header>
 
-        <main className="flex-1 overflow-auto p-6">{children}</main>
-        {/* <main className="flex-1 overflow-auto p-6">{renderDashboardContent()}</main> */}
+        <main className="flex-1 overflow-auto p-6">
+          {breadcrumbs.length > 0 && <Breadcrumb items={breadcrumbs} />}
+          {children}
+        </main>
       </div>
 
       <div className="fixed bottom-6 left-6 z-50">

@@ -1,8 +1,21 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Skeleton } from "@/components/ui/skeleton"
+
+export const dynamic = 'force-dynamic'
 
 export default function ITSupportDashboard() {
+    const [loading, setLoading] = useState(true)
+
+    useEffect(() => {
+        // Simulate data loading
+        const timer = setTimeout(() => {
+            setLoading(false)
+        }, 800)
+        return () => clearTimeout(timer)
+    }, [])
 
     const renderDashboardContent = () => {
         return (
@@ -16,7 +29,26 @@ export default function ITSupportDashboard() {
                                 <CardDescription>Comprehensive overview of IT support operations</CardDescription>
                             </CardHeader>
                             <CardContent>
-                                <div className="grid gap-6 md:grid-cols-2">
+                                {loading ? (
+                                    <div className="space-y-4">
+                                        <Skeleton className="h-8 w-48" />
+                                        <div className="space-y-3">
+                                            {[1, 2, 3, 4, 5, 6].map(i => (
+                                                <div key={i} className="flex justify-between">
+                                                    <Skeleton className="h-4 w-40" />
+                                                    <Skeleton className="h-4 w-16" />
+                                                </div>
+                                            ))}
+                                        </div>
+                                        <Skeleton className="h-8 w-48 mt-6" />
+                                        <div className="space-y-2">
+                                            {[1, 2, 3, 4].map(i => (
+                                                <Skeleton key={i} className="h-16 w-full" />
+                                            ))}
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="grid gap-6 md:grid-cols-2">
                                     <div className="space-y-4">
                                         <h4 className="font-semibold">Key Performance Indicators</h4>
                                         <div className="space-y-3">
@@ -72,6 +104,7 @@ export default function ITSupportDashboard() {
                                         </div>
                                     </div>
                                 </div>
+                                )}
                             </CardContent>
                         </Card>
                     </div>

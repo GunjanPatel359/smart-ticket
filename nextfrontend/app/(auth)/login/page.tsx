@@ -29,19 +29,20 @@ const handleSubmit = async (e: React.FormEvent) => {
     const res = await login({ email, password, role });
 
     if (res.success) {
-      // Save token to localStorage
       if (res.user_token) {
+        window.location.href = "/user";
         localStorage.setItem("user_token", res.user_token);
       }
       if (res.admin_token) {
+        window.location.href = "/admin";
         localStorage.setItem("admin_token", res.admin_token);
       }
       if (res.technician_token) {
+        window.location.href = "/technician";
         localStorage.setItem("technician_token", res.technician_token);
       }
 
-      // Redirect to dashboard
-      window.location.href = "/";
+      // window.location.href = "/";
     } else {
       alert(res.message);
     }

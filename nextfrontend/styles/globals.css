@@ -122,4 +122,26 @@
   body {
     @apply bg-background text-foreground;
   }
+  
+  /* Enhanced focus indicators for accessibility */
+  *:focus-visible {
+    @apply outline-2 outline-offset-2 outline-primary;
+  }
+  
+  /* Ensure buttons and links have visible focus */
+  button:focus-visible,
+  a:focus-visible,
+  [role="button"]:focus-visible {
+    @apply outline-2 outline-offset-2 outline-primary ring-2 ring-primary/20;
+  }
+  
+  /* Focus for interactive table rows */
+  tr[role="button"]:focus-visible {
+    @apply outline-2 outline-offset-2 outline-primary bg-accent;
+  }
+  
+  /* Focus for card-based interactive elements */
+  [role="button"].cursor-pointer:focus-visible {
+    @apply outline-2 outline-offset-2 outline-primary ring-2 ring-primary/20;
+  }
 }

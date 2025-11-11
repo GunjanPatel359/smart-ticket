@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Skeleton } from "@/components/ui/skeleton"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import {
@@ -33,6 +34,7 @@ type Skill = {
 
 export default function SkillsManager() {
   const [skills, setSkills] = useState<Skill[]>([])
+  const [loading, setLoading] = useState(true)
 
   // Create form state
   const [name, setName] = useState("")
@@ -58,12 +60,15 @@ export default function SkillsManager() {
 
   async function refreshSkills() {
     try {
+      setLoading(true)
       const response = await getAllSkills()
       if (response.success && response.skills) {
         setSkills(response.skills)
       }
     } catch (error) {
       console.error("Failed to fetch skills:", error)
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -209,18 +214,36 @@ export default function SkillsManager() {
           <CardDescription>Manage the list of available skills</CardDescription>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Category</TableHead>
-                <TableHead>Description</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {skills.map((skill) => (
+          {loading ? (
+            <div className="space-y-4">
+              <div className="space-y-2">
+                {[1, 2, 3, 4, 5, 6].map(i => (
+                  <div key={i} className="flex items-center gap-4 py-3 border-b">
+                    <Skeleton className="h-4 w-32" />
+                    <Skeleton className="h-4 w-24" />
+                    <Skeleton className="h-4 flex-1" />
+                    <Skeleton className="h-4 w-16" />
+                    <div className="flex gap-2 ml-auto">
+                      <Skeleton className="h-8 w-16" />
+                      <Skeleton className="h-8 w-20" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Category</TableHead>
+                  <TableHead>Description</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {skills.map((skill) => (
                 <TableRow key={skill.id}>
                   <TableCell className="font-medium">{skill.name}</TableCell>
                   <TableCell>{skill.category}</TableCell>
@@ -314,16 +337,17 @@ export default function SkillsManager() {
                     </div>
                   </TableCell>
                 </TableRow>
-              ))}
-              {skills.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground">
-                    No skills yet. Use the form above to add your first skill.
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
+                ))}
+                {skills.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center text-muted-foreground">
+                      No skills yet. Use the form above to add your first skill.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          )}
         </CardContent>
       </Card>
     </div>

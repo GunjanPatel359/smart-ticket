@@ -1,5 +1,6 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   TicketIcon,
@@ -19,24 +20,132 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts"
-
-const priorityDistribution = [
-  { name: "Critical", value: 15, color: "#ef4444", percentage: 7.7 },
-  { name: "High", value: 45, color: "#f97316", percentage: 23.1 },
-  { name: "Medium", value: 95, color: "#eab308", percentage: 48.7 },
-  { name: "Low", value: 40, color: "#22c55e", percentage: 20.5 },
-]
+import { getUserSupportTickets } from "@/actions/ticket"
+import { Ticket } from "@prisma/client"
 
 export default function ITSupportDashboard() {
-      const ticketTrendData = [
-    { month: "Jan", tickets: 120, resolved: 110 },
-    { month: "Feb", tickets: 135, resolved: 125 },
-    { month: "Mar", tickets: 148, resolved: 140 },
-    { month: "Apr", tickets: 162, resolved: 155 },
-    { month: "May", tickets: 178, resolved: 170 },
-    { month: "Jun", tickets: 195, resolved: 185 },
-  ]
+    const [loading, setLoading] = useState(true)
+    const [tickets, setTickets] = useState<Ticket[]>([])
+    const [error, setError] = useState<string | null>(null)
+
+    useEffect(() => {
+        const fetchData = async () => {
+            try {
+                setLoading(true)
+                setError(null)
+                
+                const response = await getUserSupportTickets()
+                
+                if (response.success && response.tickets) {
+                    setTickets(response.tickets)
+                } else {
+                    setError(response.message)
+                }
+            } catch (err) {
+                console.error("Error fetching user tickets:", err)
+                setError("Failed to load ticket data")
+            } finally {
+                setLoading(false)
+            }
+        }
+
+        fetchData()
+    }, [])
+
+    // Calculate metrics from tickets
+    const calculateMetrics = () => {
+        const openTickets = tickets.filter(t => 
+            t.status === 'new' || t.status === 'assigned' || t.status === 'in_progress' || t.status === 'on_hold'
+        ).length
+        
+        const resolvedTickets = tickets.filter(t => 
+            t.status === 'resolved' || t.status === 'closed'
+        ).length
+
+        // Priority distribution
+        const priorityCounts: Record<string, number> = {
+            critical: 0,
+            high: 0,
+            normal: 0,
+            low: 0
+        }
+        
+        tickets.forEach(ticket => {
+            if (ticket.priority in priorityCounts) {
+                priorityCounts[ticket.priority]++
+            }
+        })
+
+        const priorityDistribution = [
+            { name: "Critical", value: priorityCounts.critical, color: "#ef4444" },
+            { name: "High", value: priorityCounts.high, color: "#f97316" },
+            { name: "Medium", value: priorityCounts.normal, color: "#eab308" },
+            { name: "Low", value: priorityCounts.low, color: "#22c55e" },
+        ].filter(item => item.value > 0)
+
+        // Monthly trend data
+        const monthlyData: Record<string, { month: string; tickets: number; resolved: number }> = {}
+        
+        tickets.forEach(ticket => {
+            const ticketDate = new Date(ticket.createdAt)
+            const monthKey = ticketDate.toLocaleString('default', { month: 'short' })
+            
+            if (!monthlyData[monthKey]) {
+                monthlyData[monthKey] = { month: monthKey, tickets: 0, resolved: 0 }
+            }
+            
+            monthlyData[monthKey].tickets++
+            if (ticket.status === 'resolved' || ticket.status === 'closed') {
+                monthlyData[monthKey].resolved++
+            }
+        })
+
+        const ticketTrendData = Object.values(monthlyData)
+
+        // Calculate average response time (simplified)
+        const resolvedWithTime = tickets.filter(t => t.status === 'resolved' || t.status === 'closed')
+        let avgResponseTime = 0
+        if (resolvedWithTime.length > 0) {
+            const totalHours = resolvedWithTime.reduce((sum, ticket) => {
+                const created = new Date(ticket.createdAt).getTime()
+                const updated = new Date(ticket.updatedAt).getTime()
+                return sum + (updated - created) / (1000 * 60 * 60)
+            }, 0)
+            avgResponseTime = totalHours / resolvedWithTime.length
+        }
+
+        return {
+            totalTickets: tickets.length,
+            openTickets,
+            resolvedTickets,
+            avgResponseTime: avgResponseTime.toFixed(1),
+            highPriorityOpen: tickets.filter(t => 
+                (t.priority === 'high' || t.priority === 'critical') && 
+                (t.status === 'new' || t.status === 'assigned' || t.status === 'in_progress')
+            ).length,
+            priorityDistribution,
+            ticketTrendData
+        }
+    }
+
+    const metrics = calculateMetrics()
+
     const renderDashboardContent = () => {
+        if (error) {
+            return (
+                <div className="flex items-center justify-center h-64">
+                    <div className="text-center">
+                        <p className="text-red-600 mb-4">{error}</p>
+                        <button 
+                            onClick={() => window.location.reload()} 
+                            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                        >
+                            Retry
+                        </button>
+                    </div>
+                </div>
+            )
+        }
         return (
             <>
             <div className="space-y-6">
@@ -47,8 +156,16 @@ export default function ITSupportDashboard() {
                     <TicketIcon className="h-4 w-4 text-muted-foreground" />
                   </CardHeader>
                   <CardContent>
-                    <div className="text-2xl font-bold">3</div>
-                    <p className="text-xs text-muted-foreground">2 high priority</p>
+                    {loading ? (
+                      <div className="text-2xl font-bold">...</div>
+                    ) : (
+                      <>
+                        <div className="text-2xl font-bold">{metrics.openTickets}</div>
+                        <p className="text-xs text-muted-foreground">
+                          {metrics.highPriorityOpen} high priority
+                        </p>
+                      </>
+                    )}
                   </CardContent>
                 </Card>
                 <Card>
@@ -57,18 +174,30 @@ export default function ITSupportDashboard() {
                     <ClockIcon className="h-4 w-4 text-muted-foreground" />
                   </CardHeader>
                   <CardContent>
-                    <div className="text-2xl font-bold">2.4h</div>
-                    <p className="text-xs text-green-600">15% faster</p>
+                    {loading ? (
+                      <div className="text-2xl font-bold">...</div>
+                    ) : (
+                      <>
+                        <div className="text-2xl font-bold">{metrics.avgResponseTime}h</div>
+                        <p className="text-xs text-muted-foreground">Average time</p>
+                      </>
+                    )}
                   </CardContent>
                 </Card>
                 <Card>
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">Satisfaction</CardTitle>
+                    <CardTitle className="text-sm font-medium">Total Tickets</CardTitle>
                     <TrophyIcon className="h-4 w-4 text-muted-foreground" />
                   </CardHeader>
                   <CardContent>
-                    <div className="text-2xl font-bold">4.8/5</div>
-                    <p className="text-xs text-muted-foreground">Recent tickets</p>
+                    {loading ? (
+                      <div className="text-2xl font-bold">...</div>
+                    ) : (
+                      <>
+                        <div className="text-2xl font-bold">{metrics.totalTickets}</div>
+                        <p className="text-xs text-muted-foreground">All time</p>
+                      </>
+                    )}
                   </CardContent>
                 </Card>
                 <Card>
@@ -77,8 +206,14 @@ export default function ITSupportDashboard() {
                     <CheckCircleIcon className="h-4 w-4 text-muted-foreground" />
                   </CardHeader>
                   <CardContent>
-                    <div className="text-2xl font-bold">24</div>
-                    <p className="text-xs text-muted-foreground">This month</p>
+                    {loading ? (
+                      <div className="text-2xl font-bold">...</div>
+                    ) : (
+                      <>
+                        <div className="text-2xl font-bold">{metrics.resolvedTickets}</div>
+                        <p className="text-xs text-muted-foreground">Completed</p>
+                      </>
+                    )}
                   </CardContent>
                 </Card>
               </div>
@@ -89,15 +224,25 @@ export default function ITSupportDashboard() {
                     <CardTitle>Ticket Resolution Trend</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <ResponsiveContainer width="100%" height={300}>
-                      <LineChart data={ticketTrendData}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="month" />
-                        <YAxis />
-                        <Tooltip />
-                        <Line type="monotone" dataKey="resolved" stroke="#22c55e" strokeWidth={2} />
-                      </LineChart>
-                    </ResponsiveContainer>
+                    {loading ? (
+                      <div className="flex items-center justify-center h-[300px]">
+                        <div className="text-muted-foreground">Loading...</div>
+                      </div>
+                    ) : metrics.ticketTrendData.length > 0 ? (
+                      <ResponsiveContainer width="100%" height={300}>
+                        <LineChart data={metrics.ticketTrendData}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="month" />
+                          <YAxis />
+                          <Tooltip />
+                          <Line type="monotone" dataKey="resolved" stroke="#22c55e" strokeWidth={2} />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="flex items-center justify-center h-[300px]">
+                        <div className="text-muted-foreground">No data available</div>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
 
@@ -106,23 +251,33 @@ export default function ITSupportDashboard() {
                     <CardTitle>Priority Distribution</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <ResponsiveContainer width="100%" height={300}>
-                      <PieChart>
-                        <Pie
-                          data={priorityDistribution}
-                          cx="50%"
-                          cy="50%"
-                          outerRadius={80}
-                          dataKey="value"
-                          label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                        >
-                          {priorityDistribution.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={entry.color} />
-                          ))}
-                        </Pie>
-                        <Tooltip />
-                      </PieChart>
-                    </ResponsiveContainer>
+                    {loading ? (
+                      <div className="flex items-center justify-center h-[300px]">
+                        <div className="text-muted-foreground">Loading...</div>
+                      </div>
+                    ) : metrics.priorityDistribution.length > 0 ? (
+                      <ResponsiveContainer width="100%" height={300}>
+                        <PieChart>
+                          <Pie
+                            data={metrics.priorityDistribution}
+                            cx="50%"
+                            cy="50%"
+                            outerRadius={80}
+                            dataKey="value"
+                            label={({ name, percent }: any) => `${name} ${(percent * 100).toFixed(0)}%`}
+                          >
+                            {metrics.priorityDistribution.map((entry: any, index: number) => (
+                              <Cell key={`cell-${index}`} fill={entry.color} />
+                            ))}
+                          </Pie>
+                          <Tooltip />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="flex items-center justify-center h-[300px]">
+                        <div className="text-muted-foreground">No tickets yet</div>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               </div>
