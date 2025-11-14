@@ -32,11 +32,15 @@ class SkillLevel(str, Enum):
 # SUPPORTING MODELS
 # =====================
 
+class SkillInfo(BaseModel):
+    """Skill information from nested structure"""
+    id: int
+    name: str
+
 class SkillRef(BaseModel):
     """Represents a skill linked to a technician via TechnicianSkill"""
-    skill_id: int = Field(..., description="ID of the related skill")
-    name: Optional[str] = Field(None, description="Skill name (if available)")
     score: int = Field(..., ge=0, le=100, description="Skill score (0-100)")
+    skill: SkillInfo = Field(..., description="Nested skill information")
 
 
 # =====================
@@ -48,23 +52,21 @@ class Technician(BaseModel):
     id: Optional[int] = Field(None, description="Technician unique identifier")
     name: str = Field(..., min_length=2, max_length=255, description="Technician full name")
     email: str = Field(..., description="Technician email address")
-    contact_no: Optional[str] = Field(None, max_length=20, description="Technician contact number")
     department: Optional[str] = Field(None, max_length=100, description="Technician department")
 
-    # Ticket statistics
-    current_tickets: int = Field(default=0, ge=0, description="Number of tickets currently assigned")
-    resolved_tickets: int = Field(default=0, ge=0, description="Total number of tickets resolved")
-    total_tickets: int = Field(default=0, ge=0, description="Total number of tickets handled")
+    # Ticket statistics (camelCase from API)
+    currentTickets: int = Field(default=0, ge=0, description="Number of tickets currently assigned")
+    resolvedTickets: int = Field(default=0, ge=0, description="Total number of tickets resolved")
+    totalTickets: int = Field(default=0, ge=0, description="Total number of tickets handled")
 
     workload: int = Field(default=0, ge=0, description="Workload score based on ticket assignments")
-    technician_level: SkillLevel = Field(default=SkillLevel.JUNIOR, description="Technician level")
-    availability_status: AvailabilityStatus = Field(default=AvailabilityStatus.AVAILABLE, description="Current availability status")
-    is_active: bool = Field(default=True, description="Whether technician is active")
+    technicianLevel: SkillLevel = Field(default=SkillLevel.JUNIOR, description="Technician level")
+    availabilityStatus: AvailabilityStatus = Field(default=AvailabilityStatus.AVAILABLE, description="Current availability status")
+    isActive: bool = Field(default=True, description="Whether technician is active")
     experience: float = Field(default=0.0, ge=0.0)
 
-    # Relations
-    technician_skills: Optional[List[SkillRef]] = Field(default_factory=list, description="List of skill mappings")
-    assigned_ticket_ids: Optional[List[int]] = Field(default_factory=list, description="List of assigned ticket IDs")
+    # Relations (camelCase from API)
+    technicianSkills: Optional[List[SkillRef]] = Field(default_factory=list, description="List of skill mappings")
 
 class TechnicianResponse(BaseModel):
     """Response model for API responses"""

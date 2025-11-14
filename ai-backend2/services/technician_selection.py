@@ -130,11 +130,15 @@ def select_best_technician_for_ticket(
         def _format_technicians_for_prompt(technicians: List[Technician]) -> str:
             lines = []
             for tech in technicians:
+                # Format skills properly
+                skills_str = ", ".join([f"{ts.skill.name} ({ts.score}%)" for ts in tech.technicianSkills]) if tech.technicianSkills else "No skills"
+                
                 info = [
                     f"- ID: {tech.id}, Name: {tech.name}",
                     f"Workload: {tech.workload}%",
-                    f"Skill Level: {str(tech.technician_skills)}",
-                    f"Availability: {tech.availability_status}"
+                    f"Skills: {skills_str}",
+                    f"Skill Level: {tech.technicianLevel.value}",
+                    f"Availability: {tech.availabilityStatus.value}"
                 ]
                 lines.append(", ".join(info))
             return "\n".join(lines)

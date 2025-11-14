@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -8,8 +9,13 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Progress } from "@/components/ui/progress"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { PlusIcon, ArrowUpIcon, ArrowDownIcon } from "@heroicons/react/24/outline"
-import { getAllTechnicians } from "@/actions/technician"
+import { getAllTechnicians, createTechnician } from "@/actions/technician"
+import { SkillLevel, AvailabilityStatus } from "@prisma/client"
 
 // 🔹 Skill level colors
 const getLevelColor = (level: string) => {
@@ -46,12 +52,28 @@ const getAvailabilityColor = (status: string) => {
 }
 
 export default function ITSupportDashboard() {
+  const router = useRouter()
   const [technicians, setTechnicians] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [page, setPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
   const [sortField, setSortField] = useState("name")
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc")
+  
+  // Modal state
+  const [isModalOpen, setIsModalOpen] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [formData, setFormData] = useState({
+    name: "",
+    email: "",
+    password: "",
+    contactNo: "",
+    department: "",
+    technicianLevel: "junior" as SkillLevel,
+    availabilityStatus: "available" as AvailabilityStatus,
+  })
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({})
+  const [submitError, setSubmitError] = useState("")
 
   useEffect(() => {
     const fetchTechnicians = async () => {
@@ -89,6 +111,119 @@ export default function ITSupportDashboard() {
     )
   }
 
+  const validateForm = () => {
+    const errors: Record<string, string> = {}
+    
+    if (!formData.name.trim()) {
+      errors.name = "Name is required"
+    } else if (formData.name.trim().length < 2) {
+      errors.name = "Name must be at least 2 characters"
+    } else if (formData.name.length > 255) {
+      errors.name = "Name must not exceed 255 characters"
+    }
+    
+    if (!formData.email.trim()) {
+      errors.email = "Email is required"
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+      errors.email = "Please enter a valid email address"
+    }
+    
+    if (!formData.password.trim()) {
+      errors.password = "Password is required"
+    } else if (formData.password.length < 6) {
+      errors.password = "Password must be at least 6 characters"
+    }
+    
+    if (formData.contactNo && formData.contactNo.length > 20) {
+      errors.contactNo = "Contact number must not exceed 20 characters"
+    }
+    
+    if (formData.department && formData.department.length > 100) {
+      errors.department = "Department must not exceed 100 characters"
+    }
+    
+    setFormErrors(errors)
+    return Object.keys(errors).length === 0
+  }
+
+  const handleInputChange = (field: string, value: string) => {
+    setFormData(prev => ({ ...prev, [field]: value }))
+    // Clear error for this field when user starts typing
+    if (formErrors[field]) {
+      setFormErrors(prev => ({ ...prev, [field]: "" }))
+    }
+    setSubmitError("")
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    if (!validateForm()) {
+      return
+    }
+    
+    setIsSubmitting(true)
+    setSubmitError("")
+    
+    try {
+      const result = await createTechnician({
+        name: formData.name.trim(),
+        email: formData.email.trim(),
+        password: formData.password,
+        contactNo: formData.contactNo.trim() || undefined,
+        department: formData.department.trim() || undefined,
+        technicianLevel: formData.technicianLevel,
+        availabilityStatus: formData.availabilityStatus,
+      })
+      
+      if (result.success) {
+        // Reset form and close modal
+        setFormData({
+          name: "",
+          email: "",
+          password: "",
+          contactNo: "",
+          department: "",
+          technicianLevel: "junior" as SkillLevel,
+          availabilityStatus: "available" as AvailabilityStatus,
+        })
+        setIsModalOpen(false)
+        // Refresh technician list
+        const res = await getAllTechnicians(page, 5, sortField, sortOrder)
+        if (res.success && res.technicians) {
+          setTechnicians(res.technicians)
+          setTotalPages(res.totalPages || 1)
+        }
+      } else {
+        setSubmitError(result.message)
+      }
+    } catch (error) {
+      setSubmitError("An unexpected error occurred. Please try again.")
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const handleModalClose = (open: boolean) => {
+    if (!isSubmitting) {
+      setIsModalOpen(open)
+      if (!open) {
+        // Reset form when closing
+        setFormData({
+          name: "",
+          email: "",
+          password: "",
+          contactNo: "",
+          department: "",
+          technicianLevel: "junior" as SkillLevel,
+          availabilityStatus: "available" as AvailabilityStatus,
+        })
+        setFormErrors({})
+        setSubmitError("")
+      }
+    }
+  }
+
   return (
     <div className="flex bg-background">
       <div className="flex-1 p-6">
@@ -99,10 +234,162 @@ export default function ITSupportDashboard() {
                 <CardTitle>Technician Management</CardTitle>
                 <CardDescription>Team performance and workload overview</CardDescription>
               </div>
-              <Button>
-                <PlusIcon className="h-4 w-4 mr-2" />
-                Add Technician
-              </Button>
+              <Dialog open={isModalOpen} onOpenChange={handleModalClose}>
+                <DialogTrigger asChild>
+                  <Button>
+                    <PlusIcon className="h-4 w-4 mr-2" />
+                    Add Technician
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-[500px]">
+                  <form onSubmit={handleSubmit}>
+                    <DialogHeader>
+                      <DialogTitle>Add New Technician</DialogTitle>
+                      <DialogDescription>
+                        Enter the details of the new technician. Fields marked with * are required.
+                      </DialogDescription>
+                    </DialogHeader>
+                    
+                    <div className="grid gap-4 py-4">
+                      {submitError && (
+                        <div className="text-sm text-red-600 bg-red-50 p-3 rounded-md">
+                          {submitError}
+                        </div>
+                      )}
+                      
+                      <div className="grid gap-2">
+                        <Label htmlFor="name">Name *</Label>
+                        <Input
+                          id="name"
+                          value={formData.name}
+                          onChange={(e) => handleInputChange("name", e.target.value)}
+                          placeholder="John Doe"
+                          disabled={isSubmitting}
+                          aria-invalid={!!formErrors.name}
+                        />
+                        {formErrors.name && (
+                          <p className="text-sm text-red-600">{formErrors.name}</p>
+                        )}
+                      </div>
+                      
+                      <div className="grid gap-2">
+                        <Label htmlFor="email">Email *</Label>
+                        <Input
+                          id="email"
+                          type="email"
+                          value={formData.email}
+                          onChange={(e) => handleInputChange("email", e.target.value)}
+                          placeholder="john.doe@example.com"
+                          disabled={isSubmitting}
+                          aria-invalid={!!formErrors.email}
+                        />
+                        {formErrors.email && (
+                          <p className="text-sm text-red-600">{formErrors.email}</p>
+                        )}
+                      </div>
+                      
+                      <div className="grid gap-2">
+                        <Label htmlFor="password">Password *</Label>
+                        <Input
+                          id="password"
+                          type="password"
+                          value={formData.password}
+                          onChange={(e) => handleInputChange("password", e.target.value)}
+                          placeholder="Enter password"
+                          disabled={isSubmitting}
+                          aria-invalid={!!formErrors.password}
+                        />
+                        {formErrors.password && (
+                          <p className="text-sm text-red-600">{formErrors.password}</p>
+                        )}
+                      </div>
+                      
+                      <div className="grid gap-2">
+                        <Label htmlFor="contactNo">Contact Number</Label>
+                        <Input
+                          id="contactNo"
+                          value={formData.contactNo}
+                          onChange={(e) => handleInputChange("contactNo", e.target.value)}
+                          placeholder="+1234567890"
+                          disabled={isSubmitting}
+                          aria-invalid={!!formErrors.contactNo}
+                        />
+                        {formErrors.contactNo && (
+                          <p className="text-sm text-red-600">{formErrors.contactNo}</p>
+                        )}
+                      </div>
+                      
+                      <div className="grid gap-2">
+                        <Label htmlFor="department">Department</Label>
+                        <Input
+                          id="department"
+                          value={formData.department}
+                          onChange={(e) => handleInputChange("department", e.target.value)}
+                          placeholder="IT Support"
+                          disabled={isSubmitting}
+                          aria-invalid={!!formErrors.department}
+                        />
+                        {formErrors.department && (
+                          <p className="text-sm text-red-600">{formErrors.department}</p>
+                        )}
+                      </div>
+                      
+                      <div className="grid gap-2">
+                        <Label htmlFor="technicianLevel">Skill Level *</Label>
+                        <Select
+                          value={formData.technicianLevel}
+                          onValueChange={(value) => handleInputChange("technicianLevel", value)}
+                          disabled={isSubmitting}
+                        >
+                          <SelectTrigger id="technicianLevel" className="w-full">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="junior">Junior</SelectItem>
+                            <SelectItem value="mid">Mid</SelectItem>
+                            <SelectItem value="senior">Senior</SelectItem>
+                            <SelectItem value="expert">Expert</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      
+                      <div className="grid gap-2">
+                        <Label htmlFor="availabilityStatus">Availability Status *</Label>
+                        <Select
+                          value={formData.availabilityStatus}
+                          onValueChange={(value) => handleInputChange("availabilityStatus", value)}
+                          disabled={isSubmitting}
+                        >
+                          <SelectTrigger id="availabilityStatus" className="w-full">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="available">Available</SelectItem>
+                            <SelectItem value="busy">Busy</SelectItem>
+                            <SelectItem value="in_meeting">In Meeting</SelectItem>
+                            <SelectItem value="on_break">On Break</SelectItem>
+                            <SelectItem value="focus_mode">Focus Mode</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    
+                    <DialogFooter>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => handleModalClose(false)}
+                        disabled={isSubmitting}
+                      >
+                        Cancel
+                      </Button>
+                      <Button type="submit" disabled={isSubmitting}>
+                        {isSubmitting ? "Creating..." : "Create Technician"}
+                      </Button>
+                    </DialogFooter>
+                  </form>
+                </DialogContent>
+              </Dialog>
             </div>
           </CardHeader>
           <CardContent>
@@ -153,7 +440,11 @@ export default function ITSupportDashboard() {
                   </TableHeader>
                   <TableBody>
                     {technicians.map((tech) => (
-                      <TableRow key={tech.id}>
+                      <TableRow 
+                        key={tech.id} 
+                        className="cursor-pointer hover:bg-muted/50"
+                        onClick={() => router.push(`/admin/technicians/${tech.id}`)}
+                      >
                         <TableCell>
                           <div className="flex items-center space-x-3">
                             <Avatar className="h-8 w-8">

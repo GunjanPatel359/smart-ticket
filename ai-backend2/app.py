@@ -146,11 +146,10 @@ def ticket_assignment():
             "ticket_subject": ticket.subject,
             "existing_skills": existing_skills,
             "new_skills": new_skills,
-            "assigned_technician": {
-                "id": selected_technician.id,
-                "name": selected_technician.name,
-                "justification": justification
-            }
+            "assigned_technician_id": selected_technician.id,
+            "selected_technician_id": selected_technician.id,  # Alternative field name
+            "technician_name": selected_technician.name,
+            "justification": justification
         }
 
         return jsonify(response), 200

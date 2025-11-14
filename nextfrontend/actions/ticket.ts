@@ -89,6 +89,13 @@ export const createTicket = async (data: CreateTicketInput): Promise<{
 
     let technicianId = aiResponse.data.assigned_technician_id || null;
     let justification = aiResponse.data.justification;
+    
+    // Truncate justification if too long (temporary fix until migration is run)
+    // After running: npx prisma migrate dev --name update_justification_to_text
+    // This truncation can be removed
+    if (justification && justification.length > 190) {
+      justification = justification.substring(0, 187) + "...";
+    }
 
     const updatedTicket = await prisma.ticket.update({
       where: { id: ticket.id },
@@ -103,6 +110,17 @@ export const createTicket = async (data: CreateTicketInput): Promise<{
         requiredSkills: true
       }
     });
+
+    // Update technician counters if assigned
+    if (technicianId) {
+      await prisma.technician.update({
+        where: { id: technicianId },
+        data: {
+          currentTickets: { increment: 1 },
+          totalTickets: { increment: 1 }
+        }
+      });
+    }
 
     return {
       success: true,

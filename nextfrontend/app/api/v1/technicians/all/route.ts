@@ -17,6 +17,7 @@ export async function GET(req: NextRequest) {
         currentTickets: true,
         resolvedTickets: true,
         totalTickets: true,
+        workload: true,
         technicianSkills:{
             select:{
                 score: true,
