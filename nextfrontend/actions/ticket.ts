@@ -170,7 +170,8 @@ export const updateTicket = async (data: UpdateTicketInput): Promise<{
     }
 
     // Only assigned technician or admin can update
-    if (technician && existingTicket.assignedTechnicianId !== technician.id) {
+    // Admin can always update, technician can only update their own tickets
+    if (!admin && technician && existingTicket.assignedTechnicianId !== technician.id) {
       return { success: false, message: "Forbidden" };
     }
 

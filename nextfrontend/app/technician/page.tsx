@@ -15,7 +15,7 @@ import {
   DocumentTextIcon,
 } from "@heroicons/react/24/outline"
 import { LazyBarChart } from "@/components/charts"
-import { getTechnicianCurrentTickets } from "@/actions/ticket"
+import { getTechnicianAllTickets } from "@/actions/ticket"
 import { Ticket } from "@prisma/client"
 import { KPICardsGridSkeleton, TicketListSkeleton, BarChartSkeleton } from "@/components/loading"
 import { ErrorDisplay, EmptyState, useAuthErrorHandler } from "@/components/error"
@@ -65,14 +65,18 @@ export default function TechnicianHomePage() {
           }
         }
 
-        // Fetch technician's current tickets
-        const ticketsResponse = await getTechnicianCurrentTickets()
+        // Fetch all technician's tickets (including resolved ones for metrics)
+        const ticketsResponse = await getTechnicianAllTickets()
         
         if (!ticketsResponse.success) {
           throw new Error(ticketsResponse.message)
         }
 
         const tickets = ticketsResponse.tickets || []
+        
+        // Debug: Log ticket data
+        console.log("Fetched tickets:", tickets.length)
+        console.log("Tickets data:", tickets)
         
         // Filter tickets by status (assigned, in_progress, on_hold)
         const filteredTickets = tickets.filter(t => 
@@ -176,7 +180,9 @@ export default function TechnicianHomePage() {
     }
 
   useEffect(() => {
-    fetchData()
+    // Clear cache on mount to ensure fresh data
+    ClientCache.remove("technician_home_data")
+    fetchData(false)
   }, [])
 
   const getStatusBadgeColor = (status: string) => {
