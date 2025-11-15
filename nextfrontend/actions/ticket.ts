@@ -206,26 +206,30 @@ export const updateTicket = async (data: UpdateTicketInput): Promise<{
       return { success: true, message: "No changes detected", ticket: existingTicket };
     }
 
-    // 🔹 Update ticket and create audit in transaction
-    const [updatedTicket, auditRecords] = await prisma.$transaction([
-      prisma.ticket.update({
-        where: { id: data.id },
-        data: updates,
-      }),
-      prisma.auditTrail.createMany({
-        data: auditChanges.map((change) => ({
-          action: "ticket_updated",
-          oldValue: change.oldValue,
-          newValue: change.newValue,
-          comment: `Field "${change.field}" updated`,
-          performedBy: admin ? `admin:${admin.id}` : `technician:${technician!.id}`,
-          timestamp: new Date(),
-          ticketId: data.id,
-        })),
-      }),
-    ]);
+    // 🔹 Update ticket and create audit entries
+    const updatedTicket = await prisma.ticket.update({
+      where: { id: data.id },
+      data: updates,
+    });
 
-    return { success: true, message: "Ticket updated successfully", ticket: updatedTicket, audit: auditRecords };
+    // Create audit trail entries and return them
+    const auditEntries = await Promise.all(
+      auditChanges.map((change) =>
+        prisma.auditTrail.create({
+          data: {
+            action: "ticket_updated",
+            oldValue: change.oldValue,
+            newValue: change.newValue,
+            comment: `Field "${change.field}" updated`,
+            performedBy: admin ? `admin:${admin.id}` : `technician:${technician!.id}`,
+            timestamp: new Date(),
+            ticketId: data.id,
+          },
+        })
+      )
+    );
+
+    return { success: true, message: "Ticket updated successfully", ticket: updatedTicket, audit: auditEntries };
   } catch (error) {
     console.error("Error updating ticket:", error);
     return { success: false, message: "Failed to update ticket" };

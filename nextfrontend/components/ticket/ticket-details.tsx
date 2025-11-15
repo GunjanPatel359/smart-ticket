@@ -31,6 +31,7 @@ import {
 import { addTechnicianWorkLog, deleteTechnicianTask, updateTechnicianTask, updateTicket } from "@/actions/ticket"
 import { AssignmentJustificationModal } from "../modal/justificationmodal"
 import { getTechnician } from "@/actions/technician"
+import { evaluateTechnician } from "@/actions/evaluation"
 
 // --- TYPES TO MATCH PRISMA SCHEMA ---
 
@@ -144,19 +145,36 @@ export default function TicketDetail({
     const [workLogs, setWorkLogs] = useState<WorkLog[]>(initialTicket.workLogs || [])
     const [auditTrail, setAuditTrail] = useState<AuditTrail[]>(initialTicket.auditTrail || [])
     const [newTag, setNewTag] = useState("")
-    const [assignTechId, setAssignTechId] = useState<string | undefined>(undefined)
+    const [assignTechId, setAssignTechId] = useState<string | undefined>(
+        initialTicket.assignedTechnicianId ? String(initialTicket.assignedTechnicianId) : undefined
+    )
     const [technicianDetails, setTechnicianDetails] = useState<Technician>()
     const [justificationOpen, setJustificationOpen] = useState(false);
     const [taskDialogOpen, setTaskDialogOpen] = useState(false)
     const [taskDraft, setTaskDraft] = useState<Partial<Task>>({ status: "pending" })
     const [workDesc, setWorkDesc] = useState("")
     const [workMinutes, setWorkMinutes] = useState<number>(30)
+    const [successMessage, setSuccessMessage] = useState<string>("")
+    const [isEvaluating, setIsEvaluating] = useState(false)
+    const [evaluationMessage, setEvaluationMessage] = useState<string>("")
 
 
     const allStatuses: TicketStatus[] = ["new", "assigned", "in_progress", "on_hold", "resolved", "closed", "cancelled"]
 
-    const userAllowedStatuses: TicketStatus[] = ticket.status === "resolved" ? ["resolved", "closed"] : [ticket.status]
-    const statusOptions = user ? userAllowedStatuses : allStatuses
+    // Determine status options based on role
+    const statusOptions = (() => {
+        if (admin) {
+            // Admin can change to any status
+            return allStatuses
+        } else if (technician) {
+            // Technician can change to most statuses except 'new'
+            return allStatuses.filter(s => s !== "new")
+        } else if (user) {
+            // User can only close resolved tickets or keep current status
+            return ticket.status === "resolved" ? ["resolved", "closed"] : [ticket.status]
+        }
+        return [ticket.status] // Fallback
+    })()
 
 
     const canManageAssignment = admin
@@ -183,7 +201,14 @@ export default function TicketDetail({
     useEffect(() => {
         const initiatePage = async () => {
             try {
-                if (ticket.assignedTechnicianId == null) return;
+                if (ticket.assignedTechnicianId == null) {
+                    setTechnicianDetails(undefined);
+                    setAssignTechId(undefined);
+                    return;
+                }
+
+                // Sync dropdown with assigned technician
+                setAssignTechId(String(ticket.assignedTechnicianId));
 
                 // Fetch technician details
                 const result = await getTechnician(ticket.assignedTechnicianId);
@@ -222,19 +247,109 @@ export default function TicketDetail({
         setAuditTrail((prev) => [entry, ...prev])
     }
 
-    function handleAssignTechnician() {
+    async function handleAssignTechnician() {
         if (!canManageAssignment || !assignTechId) return
+        
         const old = ticket.assignedTechnicianId?.toString()
-        setTicket((t) => ({ ...t, assignedTechnicianId: Number(assignTechId) }))
-        addAudit("assigned_technician", old, assignTechId, "Technician assigned")
-        setAssignTechId(undefined)
+        const newTechId = Number(assignTechId)
+        
+        // Check if it's the same technician
+        if (old === assignTechId) {
+            setSuccessMessage("Technician is already assigned to this ticket")
+            setTimeout(() => setSuccessMessage(""), 3000)
+            return
+        }
+        
+        try {
+            // Update ticket with new technician and clear justification
+            const result = await updateTicket({
+                id: ticket.id,
+                assignedTechnicianId: newTechId,
+                justification: "Assigned by admin" // Clear AI justification when admin manually assigns
+            })
+            
+            if (result.success && result.ticket) {
+                setTicket(result.ticket)
+                
+                // Fetch new technician details
+                const techResult = await getTechnician(newTechId)
+                if (techResult.success && techResult.technician) {
+                    setTechnicianDetails(techResult.technician)
+                }
+                
+                // Add audit trail if provided
+                if (result.audit && Array.isArray(result.audit)) {
+                    setAuditTrail((prev) => [
+                        ...prev,
+                        ...result.audit.map((auditItem: any) => ({
+                            ...auditItem,
+                            timestamp: typeof auditItem.timestamp === 'string' 
+                                ? auditItem.timestamp 
+                                : new Date(auditItem.timestamp).toISOString(),
+                        }))
+                    ])
+                }
+                
+                addAudit("assigned_technician", old, assignTechId, "Technician manually assigned by admin")
+                
+                // Show success message
+                setSuccessMessage("Technician assigned successfully!")
+                setTimeout(() => setSuccessMessage(""), 3000)
+                
+                // Keep the dropdown value as the newly assigned technician
+                setAssignTechId(assignTechId)
+            } else {
+                alert(result.message || "Failed to assign technician")
+            }
+        } catch (error) {
+            console.error("Error assigning technician:", error)
+            alert("Something went wrong while assigning technician")
+        }
     }
 
-    function handleRemoveTechnician() {
+    async function handleRemoveTechnician() {
         if (!canManageAssignment) return
+        
         const old = ticket.assignedTechnicianId?.toString()
-        setTicket((t) => ({ ...t, assignedTechnicianId: null }))
-        addAudit("removed_technician", old, undefined, "Technician removed")
+        
+        try {
+            // Update ticket to remove technician and clear justification
+            const result = await updateTicket({
+                id: ticket.id,
+                assignedTechnicianId: null,
+                justification: null // Clear justification when removing technician
+            })
+            
+            if (result.success && result.ticket) {
+                setTicket(result.ticket)
+                setTechnicianDetails(undefined)
+                setAssignTechId(undefined) // Clear dropdown selection
+                
+                // Add audit trail if provided
+                if (result.audit && Array.isArray(result.audit)) {
+                    setAuditTrail((prev) => [
+                        ...prev,
+                        ...result.audit.map((auditItem: any) => ({
+                            ...auditItem,
+                            timestamp: typeof auditItem.timestamp === 'string' 
+                                ? auditItem.timestamp 
+                                : new Date(auditItem.timestamp).toISOString(),
+                        }))
+                    ])
+                }
+                
+                addAudit("removed_technician", old, undefined, "Technician removed by admin")
+                
+                // Show success message
+                setSuccessMessage("Technician removed successfully!")
+                setTimeout(() => setSuccessMessage(""), 3000)
+            } else {
+                alert(result.message || "Failed to remove technician")
+            }
+        } catch (error) {
+            console.error("Error removing technician:", error)
+            alert("Something went wrong while removing technician")
+        }
     }
 
     function updateDetail<K extends keyof Ticket>(key: K, value: Ticket[K]) {
@@ -433,6 +548,39 @@ export default function TicketDetail({
         }
     }
 
+    const handleSubmitFeedback = async () => {
+        if (!canGiveFeedback) return
+        
+        // First update the ticket with feedback
+        try {
+            setIsEvaluating(true)
+            setEvaluationMessage("")
+            
+            const result = await updateTicket(ticket)
+            
+            if (!result.success) {
+                alert(result.message || "Failed to submit feedback")
+                return
+            }
+            
+            // Then evaluate the technician
+            const evaluationResult = await evaluateTechnician(ticket.id)
+            
+            if (evaluationResult.success) {
+                setEvaluationMessage("✓ Feedback submitted and technician evaluated successfully!")
+                setTimeout(() => setEvaluationMessage(""), 5000)
+            } else {
+                setEvaluationMessage(`⚠ Feedback submitted, but evaluation failed: ${evaluationResult.message}`)
+                setTimeout(() => setEvaluationMessage(""), 5000)
+            }
+        } catch (error) {
+            console.error("Error submitting feedback:", error)
+            alert("Something went wrong while submitting feedback")
+        } finally {
+            setIsEvaluating(false)
+        }
+    }
+
 
     return (
         <div className="flex flex-col gap-6">
@@ -479,28 +627,35 @@ export default function TicketDetail({
                     <CardHeader>
                         <CardTitle>Technician Assignment</CardTitle>
                     </CardHeader>
-                    <CardContent className="flex flex-col gap-3 md:flex-row md:items-end">
-                        <div className="w-full md:w-80">
-                            <Label className="mb-1 block">Select Technician</Label>
-                            <Select value={assignTechId} onValueChange={setAssignTechId}>
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Choose a technician" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectGroup>
-                                        <SelectLabel>Technicians</SelectLabel>
-                                        {technicians.map((t) => (
-                                            <SelectItem value={String(t.id)} key={t.id}>
-                                                {t.name}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectGroup>
-                                </SelectContent>
-                            </Select>
+                    <CardContent className="flex flex-col gap-3">
+                        {successMessage && (
+                            <div className="bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded-md text-sm">
+                                ✓ {successMessage}
+                            </div>
+                        )}
+                        <div className="flex flex-col gap-3 md:flex-row md:items-end">
+                            <div className="w-full md:w-80">
+                                <Label className="mb-1 block">Select Technician</Label>
+                                <Select value={assignTechId} onValueChange={setAssignTechId}>
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Choose a technician" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectGroup>
+                                            <SelectLabel>Technicians</SelectLabel>
+                                            {technicians.map((t) => (
+                                                <SelectItem value={String(t.id)} key={t.id}>
+                                                    {t.name}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectGroup>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <Button onClick={handleAssignTechnician} disabled={!assignTechId}>
+                                Assign
+                            </Button>
                         </div>
-                        <Button onClick={handleAssignTechnician} disabled={!assignTechId}>
-                            Assign
-                        </Button>
                     </CardContent>
                 </Card>
             )}
@@ -686,6 +841,15 @@ export default function TicketDetail({
                         <CardTitle>Feedback & Satisfaction</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-4">
+                        {evaluationMessage && (
+                            <div className={`px-4 py-3 rounded-md text-sm ${
+                                evaluationMessage.startsWith('✓') 
+                                    ? 'bg-green-50 border border-green-200 text-green-800'
+                                    : 'bg-yellow-50 border border-yellow-200 text-yellow-800'
+                            }`}>
+                                {evaluationMessage}
+                            </div>
+                        )}
                         <div className="space-y-2">
                             <Label>Satisfaction Rating (1-5)</Label>
                             <Select
@@ -714,9 +878,18 @@ export default function TicketDetail({
                                 readOnly={ticket.status !== 'resolved' && ticket.status !== 'closed'}
                                 rows={4}
                             />
-                            {(ticket.status !== 'resolved' && ticket.status !== 'closed') &&
+                            {(ticket.status !== 'resolved' && ticket.status !== 'closed') ? (
                                 <p className="text-xs text-muted-foreground">You can provide feedback once the ticket is resolved.</p>
-                            }
+                            ) : (
+                                <div className="flex justify-end mt-2">
+                                    <Button 
+                                        onClick={handleSubmitFeedback}
+                                        disabled={isEvaluating || !ticket.feedback || !ticket.satisfactionRating}
+                                    >
+                                        {isEvaluating ? "Submitting..." : "Submit Feedback"}
+                                    </Button>
+                                </div>
+                            )}
                         </div>
                     </CardContent>
                 </Card>

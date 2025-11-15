@@ -2,6 +2,7 @@ import { Suspense } from "react"
 import TicketDetail from "@/components/ticket/ticket-details"
 import { getUserToken, getTechnicianToken, getAdminToken } from "@/lib/authmiddleware"
 import { getTicketById } from "@/actions/ticket"
+import { getAllTechniciansWithoutPagination } from "@/actions/technician"
 import { redirect } from "next/navigation"
 
 export default async function TicketPage({ params }: { params: { id: string } }) {
@@ -61,12 +62,21 @@ export default async function TicketPage({ params }: { params: { id: string } })
     redirect("/unauthorized")
   }
 
+  // 🔹 Fetch all technicians if admin (for assignment dropdown)
+  let technicians: any[] = []
+  if (admin) {
+    const techResult = await getAllTechniciansWithoutPagination()
+    if (techResult.success && techResult.technicians) {
+      technicians = techResult.technicians
+    }
+  }
+
   // ✅ Render the page
   return (
     <main className="container mx-auto max-w-6xl p-4 md:p-6">
       <Suspense fallback={<div className="text-sm text-muted-foreground">Loading ticket...</div>}>
         <TicketDetail
-        technicians={[]}
+          technicians={technicians}
           initialTicket={ticket}
           user={user}
           technician={technician}

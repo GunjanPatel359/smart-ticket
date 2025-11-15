@@ -13,6 +13,7 @@ from models.skill import Skill
 from models.technician import Technician
 from services.skill_extraction import extract_skills_from_ticket as extract_skills_from_ticket_single
 from services.technician_selection import select_best_technician_for_ticket
+from services.evaluation_service import EvaluationService
 import requests
 import json
 
@@ -158,6 +159,87 @@ def ticket_assignment():
         logger.error(f"Error in ticket assignment: {str(e)}", exc_info=True)
         return jsonify({"error": str(e)}), 500
 
+
+@app.route("/api/evaluate-technician", methods=["POST"])
+def evaluate_technician():
+    """
+    Evaluate technician performance based on resolved ticket
+    Steps:
+    1. Validate input (ticket data with feedback)
+    2. Calculate metrics (resolution time, SLA adherence, skill performance, sentiment)
+    3. Update technician skills based on performance
+    4. Return evaluation results
+    """
+    logger.info("Received technician evaluation request")
+
+    try:
+        if not request.is_json:
+            return jsonify({"error": "Content-Type must be application/json"}), 400
+
+        request_data = request.get_json()
+        logger.info(f"Processing evaluation for ticket: {request_data.get('ticket_id')}")
+
+        # ✅ Step 1: Validate input
+        ticket_data = request_data.get("ticket")
+        if not ticket_data:
+            return jsonify({"error": "Missing 'ticket' field in request"}), 400
+
+        technician_id = ticket_data.get("assigned_technician_id") or ticket_data.get("assignedTechnicianId")
+        if not technician_id:
+            return jsonify({"error": "No technician assigned to this ticket"}), 400
+
+        # ✅ Step 2: Initialize evaluation service
+        evaluation_service = EvaluationService(llm=llm, technician_api_url=backend_url)
+
+        # ✅ Step 3: Calculate metrics
+        metrics = evaluation_service.calculate_metrics(ticket_data)
+
+        # ✅ Step 4: Fetch current technician skills
+        technician_url = f"{backend_url}/api/v1/technicians/{technician_id}"
+        tech_response = requests.get(technician_url, timeout=10)
+        tech_response.raise_for_status()
+        technician_data = tech_response.json().get("data", {}).get("technician", {})
+
+        current_skills = technician_data.get("technician_skills", [])
+
+        # ✅ Step 5: Update skills based on performance
+        skill_updates = evaluation_service.update_technician_skills(
+            technician_id=technician_id,
+            current_skills=current_skills,
+            ticket_metrics=metrics
+        )
+
+        # ✅ Step 6: Build response
+        response = {
+            "ticket_id": ticket_data.get("id"),
+            "technician_id": technician_id,
+            "evaluation": {
+                "resolution_time_minutes": metrics.resolution_time,
+                "sla_adherence": metrics.sla_adherence,
+                "feedback_sentiment": {
+                    "score": metrics.feedback_sentiment.score,
+                    "reasoning": metrics.feedback_sentiment.reasoning
+                },
+                "skill_performance": {
+                    skill_id: {
+                        "score": metric.score,
+                        "reasoning": metric.reasoning
+                    }
+                    for skill_id, metric in metrics.skill_metrics.items()
+                }
+            },
+            "skill_updates": skill_updates
+        }
+
+        logger.info(f"Evaluation completed for technician {technician_id}")
+        return jsonify(response), 200
+
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Backend API error: {str(e)}", exc_info=True)
+        return jsonify({"error": f"Failed to communicate with backend: {str(e)}"}), 500
+    except Exception as e:
+        logger.error(f"Error in technician evaluation: {str(e)}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
 
 
 if __name__ == "__main__":
