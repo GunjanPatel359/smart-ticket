@@ -153,7 +153,6 @@ export const updateTicket = async (data: UpdateTicketInput): Promise<{
   audit?: any;
 }> => {
   try {
-    // ✅ Verify admin or technician
     const admin = await getAdminToken();
     const technician = await getTechnicianToken();
 

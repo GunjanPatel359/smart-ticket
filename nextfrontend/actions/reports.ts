@@ -1,6 +1,6 @@
 "use server"
 
-import { getAdminToken } from "@/lib/authmiddleware";
+import { getAdminToken, getUserToken } from "@/lib/authmiddleware";
 import prisma from "@/lib/db";
 
 export const getDetailedReport = async (startDate?: Date, endDate?: Date) => {
@@ -236,6 +236,129 @@ export const getDetailedReport = async (startDate?: Date, endDate?: Date) => {
     };
   } catch (error: any) {
     console.error("Error generating report:", error);
+    return { success: false, message: error?.message || "Failed to generate report" };
+  }
+};
+
+export const getUserReport = async (days: number = 30) => {
+  try {
+    const user = await getUserToken();
+    if (!user) {
+      return { success: false, message: "Unauthorized" };
+    }
+
+    const now = new Date();
+    const startDate = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
+
+    // Get user's tickets within the selected timeframe
+    const tickets = await prisma.ticket.findMany({
+      where: {
+        requesterId: user.id,
+        createdAt: { gte: startDate, lte: now },
+      },
+      include: {
+        requiredSkills: true,
+      },
+    });
+
+    // Calculate statistics
+    const total = tickets.length;
+    const open = tickets.filter(t => t.status === "new").length;
+    const inProgress = tickets.filter(t => t.status === "in_progress" || t.status === "assigned").length;
+    const resolved = tickets.filter(t => t.status === "resolved").length;
+    const closed = tickets.filter(t => t.status === "closed").length;
+
+    // Calculate average resolution time
+    const resolvedTickets = tickets.filter(t => t.resolutionTime);
+    const resolutionTimes = resolvedTickets.map(ticket => {
+      const created = new Date(ticket.createdAt).getTime();
+      const resolved = new Date(ticket.resolutionTime!).getTime();
+      return (resolved - created) / (1000 * 60 * 60); // hours
+    });
+    const avgResolutionTime = resolutionTimes.length > 0
+      ? resolutionTimes.reduce((a, b) => a + b, 0) / resolutionTimes.length
+      : 0;
+
+    // Calculate satisfaction score
+    const ratedTickets = tickets.filter(t => t.satisfactionRating !== null);
+    const avgSatisfaction = ratedTickets.length > 0
+      ? ratedTickets.reduce((sum, t) => sum + (t.satisfactionRating || 0), 0) / ratedTickets.length
+      : 0;
+
+    // Category distribution (based on required skills)
+    const categoryMap = new Map<string, number>();
+    tickets.forEach(ticket => {
+      ticket.requiredSkills.forEach(skill => {
+        const category = skill.category || "Other";
+        categoryMap.set(category, (categoryMap.get(category) || 0) + 1);
+      });
+    });
+
+    const categories = Array.from(categoryMap.entries()).map(([name, count]) => ({
+      name,
+      count,
+      percentage: total > 0 ? Math.round((count / total) * 100) : 0,
+    }));
+
+    // Priority distribution
+    const priorityMap = new Map<string, number>();
+    tickets.forEach(ticket => {
+      const priority = ticket.priority.charAt(0).toUpperCase() + ticket.priority.slice(1);
+      priorityMap.set(priority, (priorityMap.get(priority) || 0) + 1);
+    });
+
+    const priorities = Array.from(priorityMap.entries()).map(([name, count]) => ({
+      name,
+      count,
+      percentage: total > 0 ? Math.round((count / total) * 100) : 0,
+    }));
+
+    // Trends (daily ticket creation and resolution)
+    const trendDays = Math.min(days, 30);
+    const trends = [];
+    for (let i = trendDays - 1; i >= 0; i--) {
+      const dayStart = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
+      dayStart.setHours(0, 0, 0, 0);
+      const dayEnd = new Date(dayStart);
+      dayEnd.setHours(23, 59, 59, 999);
+
+      const dayTickets = tickets.filter(t => {
+        const created = new Date(t.createdAt);
+        return created >= dayStart && created <= dayEnd;
+      });
+
+      const dayResolved = tickets.filter(t => {
+        if (!t.resolutionTime) return false;
+        const resolved = new Date(t.resolutionTime);
+        return resolved >= dayStart && resolved <= dayEnd;
+      });
+
+      trends.push({
+        period: dayStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        tickets: dayTickets.length,
+        resolved: dayResolved.length,
+      });
+    }
+
+    return {
+      success: true,
+      data: {
+        stats: {
+          total,
+          open,
+          inProgress,
+          resolved,
+          closed,
+          avgResolutionTime: parseFloat(avgResolutionTime.toFixed(2)),
+          satisfactionScore: parseFloat(avgSatisfaction.toFixed(2)),
+        },
+        categories,
+        priorities,
+        trends,
+      },
+    };
+  } catch (error: any) {
+    console.error("Error generating user report:", error);
     return { success: false, message: error?.message || "Failed to generate report" };
   }
 };

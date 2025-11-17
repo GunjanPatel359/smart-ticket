@@ -121,7 +121,7 @@ SCORE: <number>
 REASON: <explanation>"""
 
         try:
-            response = self.llm.predict(prompt)
+            response = self.llm.invoke(prompt).content
             lines = [line.strip() for line in response.split('\n') if line.strip()]
             
             score_line = None
@@ -177,7 +177,7 @@ REASON: <justification>
 """
 
         try:
-            analysis = self.llm.predict(prompt)
+            analysis = self.llm.invoke(prompt).content
             skill_evaluations = {}
             current_skill = None
             current_data = {}

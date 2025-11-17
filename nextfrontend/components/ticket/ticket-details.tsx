@@ -551,20 +551,18 @@ export default function TicketDetail({
     const handleSubmitFeedback = async () => {
         if (!canGiveFeedback) return
         
-        // First update the ticket with feedback
+        // First validate feedback and rating
         try {
             setIsEvaluating(true)
             setEvaluationMessage("")
             
-            const result = await updateTicket(ticket)
-            
-            if (!result.success) {
-                alert(result.message || "Failed to submit feedback")
+            if (!ticket.feedback || ticket.feedback === "" || !ticket.satisfactionRating || typeof ticket.satisfactionRating !== "number") {
+                alert("Please provide both feedback and satisfaction rating before submitting")
                 return
             }
             
             // Then evaluate the technician
-            const evaluationResult = await evaluateTechnician(ticket.id)
+            const evaluationResult = await evaluateTechnician(ticket.id,ticket.feedback,ticket.satisfactionRating)
             
             if (evaluationResult.success) {
                 setEvaluationMessage("✓ Feedback submitted and technician evaluated successfully!")
@@ -574,7 +572,7 @@ export default function TicketDetail({
                 setTimeout(() => setEvaluationMessage(""), 5000)
             }
         } catch (error) {
-            console.error("Error submitting feedback:", error)
+            console.log("Error submitting feedback:", error)
             alert("Something went wrong while submitting feedback")
         } finally {
             setIsEvaluating(false)
