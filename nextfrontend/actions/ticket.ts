@@ -93,9 +93,6 @@ export const createTicket = async (data: CreateTicketInput): Promise<{
     // Truncate justification if too long (temporary fix until migration is run)
     // After running: npx prisma migrate dev --name update_justification_to_text
     // This truncation can be removed
-    if (justification && justification.length > 190) {
-      justification = justification.substring(0, 187) + "...";
-    }
 
     const updatedTicket = await prisma.ticket.update({
       where: { id: ticket.id },

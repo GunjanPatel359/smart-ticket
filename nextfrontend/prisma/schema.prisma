@@ -239,7 +239,7 @@ model Ticket {
 
   reopenedCount   Int       @default(0) @map("reopened_count")
   
-  justification   String?   @db.Text
+  justification   String?   @db.LongText
   
   satisfactionRating Int?   @map("satisfaction_rating")
   score           Float? 
